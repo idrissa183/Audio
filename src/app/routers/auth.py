@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status, Body
 from fastapi.security import OAuth2PasswordRequestForm
@@ -10,11 +10,13 @@ from src.app.models.user import User, Message
 from src.app.utils.authentication import create_access_token, create_refresh_token, get_password, verify_password, \
     get_current_user, decode_token
 from src.app.schemas.user import Token, UserCreate, RegisterResponse, SessionResponse, SessionCreate, MessageCreate, \
-    MessageResponse
+    MessageResponse, prepare_features, ML_MODELS
 from sqlalchemy.orm import Session
 import os
 from dotenv import load_dotenv
 from src.app.models.user import Session as SessionModel
+from joblib import load
+
 load_dotenv()
 
 
@@ -185,49 +187,147 @@ async def retrieve_sessions_by_user(
 
 
 
+
+# Router endpoints
 @router.post("/message", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
 async def create_message(
-    message: MessageCreate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+        message: MessageCreate,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
 ):
-    # Vérifier si la session appartient à l'utilisateur
     session = db.query(SessionModel).filter(
-        SessionModel.id == message.session_id,
-        SessionModel.user_uid == current_user.uid
+        message.session_id == SessionModel.id,
+        current_user.uid == SessionModel.user_uid
     ).first()
+
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session not found or access denied"
         )
+    messages_to_return = []
 
-    db_message = Message(
+    user_message = Message(
         session_id=message.session_id,
+        sender=current_user.username,
+        model_type=message.model_type,
+        algorithm=message.algorithm,
         message=message.message,
-        sender=current_user.username
+        prediction=0.0
     )
-    db.add(db_message)
+
+    db.add(user_message)
     db.commit()
-    db.refresh(db_message)
-    return db_message
+    db.refresh(user_message)
+    messages_to_return.append(user_message)
+
+    # Préparation des features et prédiction
+    try:
+        from src.app.models.regression import QualityPredictor
+        X = prepare_features(message.message, message.model_type, message.algorithm)
+
+        model = ML_MODELS[message.model_type][message.algorithm]
+
+        prediction = model.predict(X)[0]
+
+        bot_message = Message(
+            session_id=message.session_id,
+            sender="bot",
+            message=message.message,
+            model_type=message.model_type,
+            algorithm=message.algorithm,
+            prediction=float(prediction)
+        )
+
+        db.add(bot_message)
+        db.commit()
+        db.refresh(bot_message)
+        messages_to_return.append(bot_message)
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Prediction failed: {str(e)}"
+        )
+
+    return messages_to_return
+
+
 
 @router.get("/message/{session_id}", response_model=List[MessageResponse])
 async def retrieve_messages_by_session(
-    session_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+        session_id: int,
+        model_type: Optional[str] = None,
+        algorithm: Optional[str] = None,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
 ):
-    # Vérifier si la session appartient à l'utilisateur
     session = db.query(SessionModel).filter(
-        SessionModel.id == session_id,
-        SessionModel.user_uid == current_user.uid
+        session_id == SessionModel.id,
+        current_user.uid == SessionModel.user_uid
     ).first()
+
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session not found or access denied"
         )
 
-    messages = db.query(Message).filter(Message.session_id == session_id).all()
+    query = db.query(Message).filter(session_id == Message.session_id)
+
+    if model_type:
+        query = query.filter(model_type == Message.model_type)
+    if algorithm:
+        query = query.filter(algorithm == Message.algorithm)
+
+    messages = query.all()
     return messages
+
+
+
+# @router.post("/message", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
+# async def create_message(
+#     message: MessageCreate,
+#     current_user: User = Depends(get_current_user),
+#     db: Session = Depends(get_db)
+# ):
+#     # Vérifier si la session appartient à l'utilisateur
+#     session = db.query(SessionModel).filter(
+#         SessionModel.id == message.session_id,
+#         SessionModel.user_uid == current_user.uid
+#     ).first()
+#     if not session:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail="Session not found or access denied"
+#         )
+#
+#     db_message = Message(
+#         session_id=message.session_id,
+#         message=message.message,
+#         sender=current_user.username
+#     )
+#     db.add(db_message)
+#     db.commit()
+#     db.refresh(db_message)
+#     return db_message
+#
+# @router.get("/message/{session_id}", response_model=List[MessageResponse])
+# async def retrieve_messages_by_session(
+#     session_id: int,
+#     current_user: User = Depends(get_current_user),
+#     db: Session = Depends(get_db)
+# ):
+#     # Vérifier si la session appartient à l'utilisateur
+#     session = db.query(SessionModel).filter(
+#         SessionModel.id == session_id,
+#         SessionModel.user_uid == current_user.uid
+#     ).first()
+#     if not session:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail="Session not found or access denied"
+#         )
+#
+#     messages = db.query(Message).filter(Message.session_id == session_id).all()
+#     return messages

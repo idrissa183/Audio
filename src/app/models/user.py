@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, String, Integer, DateTime, func, ForeignKey, Text
+from sqlalchemy import Boolean, Column, String, Integer, DateTime, func, ForeignKey, Text, JSON, Float
 from sqlalchemy.orm import relationship
 
 from src.app.db.database import Base
@@ -54,9 +54,12 @@ class Message(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(Integer, ForeignKey('sessions.id'), nullable=False)
-    sender = Column(String(length=100), nullable=False)  # Could be username or email
-    message = Column(Text, nullable=False)
+    sender = Column(String(length=100), nullable=False)
+    message = Column(JSON, nullable=False)
+    model_type = Column(String(length=50), nullable=False)
+    algorithm = Column(String(length=50), nullable=False)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
+    prediction = Column(Float, nullable=False)
 
     # Relations
     session = relationship('Session', back_populates='messages')

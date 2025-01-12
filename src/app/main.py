@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.app.core.config import *
 from src.app.db.database import Base, engine
 from src.app.routers import users, voices, auth
-
+from src.app.models.regression import QualityPredictor
 
 app = FastAPI(
     title=APP_NAME,
