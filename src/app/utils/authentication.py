@@ -10,7 +10,7 @@ from src.app.db.session import get_db
 from sqlalchemy.orm import Session
 
 from src.app.models.user import User
-
+from src.app.schemas.user import TokenData
 
 load_dotenv()
 
@@ -20,7 +20,7 @@ pwd_context = CryptContext(
     deprecated="auto" 
 )
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 def get_password(password: str) -> str :
     return pwd_context.hash(password)
@@ -75,7 +75,7 @@ def encode_token (payload: dict, secret_key: str = os.getenv("TOKEN_SECRET_KEY")
     )
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -86,15 +86,46 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         if payload is None:
             raise credentials_exception
         email: str = payload.get("sub")
-        if email is None:
+        uid: int = payload.get("uid")
+        if email is None or uid is None:
             raise credentials_exception
-    except JWTError:
+        token_data = TokenData(email=email, uid=uid)
+    except:
         raise credentials_exception
-        
-    user = db.query(User).filter(email == User.email).first()
+
+    user = db.query(User).filter(
+        token_data.email == User.email,
+        token_data.uid == User.uid
+    ).first()
     if user is None:
         raise credentials_exception
     return user
+
+
+
+# def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+#     credentials_exception = HTTPException(
+#         status_code=status.HTTP_401_UNAUTHORIZED,
+#         detail="Could not validate credentials",
+#         headers={"WWW-Authenticate": "Bearer"},
+#     )
+#     try:
+#         payload = decode_token(token)
+#         if payload is None:
+#             raise credentials_exception
+#         email: str = payload.get("sub")
+#         if email is None:
+#             raise credentials_exception
+#     except JWTError:
+#         raise credentials_exception
+#
+#     user = db.query(User).filter(email == User.email).first()
+#     if user is None:
+#         raise credentials_exception
+#     return user
+
+
+
 
 
 # def get_user_by_google_sub(google_sub: str, db: Session):
