@@ -175,12 +175,7 @@ async def create_session(
     db.add(db_session)
     db.commit()
     db.refresh(db_session)
-
-    return {
-        "message": "Session créée avec succès",
-        "success": True
-    }
-
+    return db_session
 
 @router.get("/session", response_model=List[SessionResponse])
 async def retrieve_sessions_by_user(
@@ -255,10 +250,7 @@ async def create_message(
             detail=f"Prediction failed: {str(e)}"
         )
 
-    return {
-        "message": "Message créé avec succès",
-        "success": True
-    }
+    return messages_to_return
 
 
 
