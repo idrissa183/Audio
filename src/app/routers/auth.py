@@ -212,7 +212,8 @@ async def create_message(
         sender=current_user.username,
         model_type=message.model_type,
         algorithm=message.algorithm,
-        message=message.message
+        message=message.message,
+        prediction=-1
     )
 
     db.add(user_message)
