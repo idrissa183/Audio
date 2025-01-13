@@ -175,7 +175,12 @@ async def create_session(
     db.add(db_session)
     db.commit()
     db.refresh(db_session)
-    return db_session
+
+    return {
+        "message": "Session créée avec succès",
+        "success": True
+    }
+
 
 @router.get("/session", response_model=List[SessionResponse])
 async def retrieve_sessions_by_user(
@@ -189,7 +194,7 @@ async def retrieve_sessions_by_user(
 
 
 # Router endpoints
-@router.post("/message", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/message", response_model=List[MessageResponse], status_code=status.HTTP_201_CREATED)
 async def create_message(
         message: MessageCreate,
         current_user: User = Depends(get_current_user),
@@ -212,8 +217,7 @@ async def create_message(
         sender=current_user.username,
         model_type=message.model_type,
         algorithm=message.algorithm,
-        message=message.message,
-        prediction=0.0
+        message=message.message
     )
 
     db.add(user_message)
@@ -229,6 +233,7 @@ async def create_message(
         model = ML_MODELS[message.model_type][message.algorithm]
 
         prediction = model.predict(X)[0]
+
 
         bot_message = Message(
             session_id=message.session_id,
@@ -250,7 +255,10 @@ async def create_message(
             detail=f"Prediction failed: {str(e)}"
         )
 
-    return messages_to_return
+    return {
+        "message": "Message créé avec succès",
+        "success": True
+    }
 
 
 

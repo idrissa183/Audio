@@ -59,7 +59,7 @@ class Message(Base):
     model_type = Column(String(length=50), nullable=False)
     algorithm = Column(String(length=50), nullable=False)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
-    prediction = Column(Float, nullable=False)
+    prediction = Column(Float, nullable=True)
 
     # Relations
     session = relationship('Session', back_populates='messages')
